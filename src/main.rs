@@ -49,12 +49,9 @@ fn process_multipart(cookie_value: String, m: &mut Multipart<Cursor<Bytes>>) {
             _ => "unknown",
         };*/
 
-        println!("OK");
         let filename = field.headers.filename.unwrap();
-        println!("filename: {filename}");
         let mut data = Vec::new();
         let dat_len = data.len();
-        println!("Length multipart data: {dat_len}");
         field.data.read_to_end(&mut data).expect("can't read");
 
         // Generate the path where the image will be saved
