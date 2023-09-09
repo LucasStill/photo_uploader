@@ -1,6 +1,7 @@
 use clap::{App, Arg};
-use hyper::HeaderMap;
+use hyper::{HeaderMap, Response};
 use hyper::body::Bytes;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, Read, Cursor, Write, ErrorKind};
 use std::path::Path;
@@ -24,50 +25,124 @@ use serde::{Deserialize, Serialize};
 use futures_util::{future, FutureExt};
 use multipart::server::{Multipart, MultipartField};
 use gotham::hyper::header::CONTENT_TYPE;
+use serde_json::json;
 
-fn process_multipart(cookie_value: String, m: &mut Multipart<Cursor<Bytes>>) {
+fn process_multipart(cookie_value: String, m: &mut Multipart<Cursor<Bytes>>) -> Vec<String> {
     // Create the base directory path based on the cookie
     let base_dir = format!("/Volumes/lucas_disk1/photo_unload/images/{}", cookie_value);
 
     // Check if the directory exists, create it if not
     if let Err(e) = fs::create_dir_all(&base_dir) {
         if e.kind() != ErrorKind::AlreadyExists {
-            println!("Directory already exist");
+            println!("Directory already exists");
         }
     }
 
+    let mut live_photos = HashMap::new();
+    let mut videos = Vec::new();
+
+    let mut failed_images = Vec::new();
+
     m.foreach_entry(|mut field: MultipartField<&mut Multipart<Cursor<Bytes>>>| {
         
-        let content_type = field.headers.content_type.as_ref().expect("no content type provided").to_string();
-        println!("content_type: {content_type}");
-        // Determine the file extension
-        /*let extension = match content_type.as_str() {
-            "image/jpeg" => "jpg",
-            "image/png" => "png",
-            "image/gif" => "gif",
-            // Add more image types here
-            _ => "unknown",
-        };*/
+        let content_type = field.headers.content_type.as_ref().expect("No content type provided").to_string();
+        println!("content_type: {}", content_type);
 
         let filename = field.headers.filename.unwrap();
         let mut data = Vec::new();
-        let dat_len = data.len();
-        field.data.read_to_end(&mut data).expect("can't read");
+        field.data.read_to_end(&mut data).expect("Can't read");
 
-        // Generate the path where the image will be saved
-        let image_path = format!("{}/{}", base_dir, filename);
-        println!("image_path: {image_path}");
-        // Open a new file and write the image data to it
-        match File::create(Path::new(&image_path)) {
-            Ok(mut file) => {
-                file.write_all(&data).expect("Couldn't write data to file");
-            },
-            Err(e) => {
-                println!("error creating file: {e:?} for image_path: {image_path}")
-            }
-        };
+        if data.is_empty() {
+            println!("FILE IS EMPTY!: {filename:?}");
+            failed_images.push(filename);
+        } else if filename.to_lowercase().ends_with(".heic") || filename.to_lowercase().ends_with(".mov") {
+            // Handle Live Photos
+            // You can use the filename (minus the extension) as the key
+            let key = filename.split('.').next().unwrap().to_string();
+            live_photos.entry(key).or_insert(Vec::new()).push((filename, data));
+        } else if filename.to_lowercase().ends_with(".mp4") || filename.to_lowercase().ends_with(".avi") || filename.to_lowercase().ends_with(".mkv") {
+            // Handle video files
+            videos.push((filename, data));
+        }else {
+            // Generate the path where the image or video will be saved
+            let image_path = format!("{}/{}", base_dir, filename);
+            println!("image_path: {}", image_path);
+            // Open a new file and write the image data to it
+            match File::create(Path::new(&image_path)) {
+                Ok(mut file) => {
+                    file.write_all(&data).expect("Couldn't write data to file");
+                },
+                Err(e) => {
+                    println!("Error creating file: {:?} for image_path: {}", e, image_path);
+                }
+            };
+        }
+        
 
     }).expect("An error occurred while reading multipart entries");
+
+    let live_keys = live_photos.keys();
+    println!("Hashmap: {live_keys:?}");
+
+    // Save the Live Photos
+    for (key, files) in live_photos.iter() {
+        // Create a directory for each Live Photo based on the key
+        let live_photo_dir = format!("{}/{}", base_dir, key);
+        if let Err(e) = fs::create_dir_all(&live_photo_dir) {
+            if e.kind() != std::io::ErrorKind::AlreadyExists {
+                println!("Failed to create directory: {}", live_photo_dir);
+                continue;
+            }
+        }
+
+        // Save the .HEIC and .MOV files in the directory
+        for (filename, data) in files.iter() {
+            let file_path = format!("{}/{}", live_photo_dir, filename);
+            match File::create(Path::new(&file_path)) {
+                Ok(mut file) => {
+                    file.write_all(data).expect("Couldn't write data to file");
+                },
+                Err(e) => {
+                    println!("Error creating file: {:?} for file_path: {}", e, file_path);
+                }
+            };
+        }
+    }
+
+    // Save the video files
+    for (filename, data) in videos.iter() {
+        let video_path = format!("{}/{}", base_dir, filename);
+        match File::create(Path::new(&video_path)) {
+            Ok(mut file) => {
+                file.write_all(data).expect("Couldn't write data to file");
+            },
+            Err(e) => {
+                println!("Error creating file: {:?} for video_path: {}", e, video_path);
+            }
+        };
+    }
+
+    failed_images
+
+}
+
+
+
+fn upload_handler_single(mut state: State) -> (State, Response<Body>) {
+    println!("arrived into handler");
+    let response = create_empty_response(&state, StatusCode::OK);
+    return (state, response)
+
+    /*let header_map = gotham::hyper::HeaderMap::take_from(&mut state);
+    let content_type = header_map.get(CONTENT_TYPE).unwrap().to_str().unwrap();
+
+    if !content_type.starts_with("image/") {
+        let response = create_empty_response(&state, StatusCode::BAD_REQUEST);
+        return (state, response);
+    }
+
+    let response = create_empty_response(&state, StatusCode::OK);
+    (state, response)*/
 }
 
 fn upload_handler(mut state: State) -> Pin<Box<HandlerFuture>> {
@@ -81,23 +156,21 @@ fn upload_handler(mut state: State) -> Pin<Box<HandlerFuture>> {
             Some(ct[idx + BOUNDARY.len()..].to_string())
         })
         .unwrap();
-    println!("Boundary: {boundary:?}");
-    println!("header_map: {header_map:?}");
+    
+    // Extract and parse cookie from header to build the file's directory
     let cookie = header_map.get("cookie").unwrap().to_str().unwrap();
     let mut cookie = cookie.split_once("user_uuid=").unwrap().1.to_string();
     if cookie.contains(';') {
         cookie = cookie.split_once(',').unwrap().0.to_string()
     }
-    println!("Cookie: {cookie:?}"); 
-    
-    // Cookie: "_xsrf=2|daf51b7c|a7e75759c2447131875b90de889aed48|1693407498; username-127-0-0-1-8888=\"2|1:0|10:1693409850|23:username-127-0-0-1-8888|44:OGIyZTQ4NTc2MzE4NDIwNjhhMDcwYzZhMjgwNDk0NDE=|b5c83e71fadb818a8c84b42127adec8468f535f5988904aa6a106370961a9fd9\"; _gotham_session=iokzJcT-YQTr0D96y0DReDpl3QMGQwMdYvFcPcDfQRUpb5KqatXoEbjpxvqJAvAa--Kmk_nI7tEsCJsRSlH2nQ"
 
     body::to_bytes(Body::take_from(&mut state))
         .then(|full_body| match full_body {
             Ok(valid_body) => {
                 let mut m = Multipart::with_body(Cursor::new(valid_body), boundary);
-                process_multipart(cookie, &mut m);
-                let res = create_response(&state, StatusCode::OK, TEXT_HTML, "ok".to_string());
+                let error_files = process_multipart(cookie, &mut m);
+                let error_files_json = json!({ "error_files": error_files }).to_string();
+                let res = create_response(&state, StatusCode::OK, TEXT_HTML, error_files_json);
                 future::ok((state, res)) 
             }
             Err(e) => future::err((state, e.into())),
