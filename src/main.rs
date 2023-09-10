@@ -7,15 +7,15 @@ use std::io::{BufReader, Read, Cursor, Write, ErrorKind};
 use std::path::Path;
 use gotham::pipeline::set::{new_pipeline_set, finalize_pipeline_set};
 use gotham::pipeline::new_pipeline;
-use gotham::middleware::session::{NewSessionMiddleware};
+use gotham::middleware::session::NewSessionMiddleware;
 use gotham::router::builder::{build_router, DrawRoutes, DefineSingleRoute};
-use gotham::{rustls};
+use gotham::rustls;
 use gotham::rustls::NoClientAuth;
 use gotham::rustls::internal::pemfile::{certs, pkcs8_private_keys};
 
 use gotham::state::{FromState, State};
 use std::pin::Pin;
-use gotham::handler::{HandlerFuture, HandlerResult};
+use gotham::handler::{HandlerFuture};
 use gotham::hyper::{body, Body, Uri, StatusCode};
 use gotham::helpers::http::response::{create_response, create_empty_response};
 use mime::{TEXT_HTML, IMAGE_JPEG, IMAGE_PNG, IMAGE_SVG, TEXT_CSS, TEXT_JAVASCRIPT, TEXT_XML, TEXT_PLAIN, Mime};
