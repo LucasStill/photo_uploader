@@ -15,11 +15,11 @@ use gotham::rustls::internal::pemfile::{certs, pkcs8_private_keys};
 
 use gotham::state::{FromState, State};
 use std::pin::Pin;
-use gotham::handler::{HandlerFuture};
+use gotham::handler::HandlerFuture;
 use gotham::hyper::{body, Body, Uri, StatusCode};
 use gotham::helpers::http::response::{create_response, create_empty_response};
 use mime::{TEXT_HTML, IMAGE_JPEG, IMAGE_PNG, IMAGE_SVG, TEXT_CSS, TEXT_JAVASCRIPT, TEXT_XML, TEXT_PLAIN, Mime};
-use std::{fs};
+use std::fs;
 use serde::{Deserialize, Serialize};
 use futures_util::{future, FutureExt};
 use multipart::server::{Multipart, MultipartField};
