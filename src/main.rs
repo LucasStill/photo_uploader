@@ -18,7 +18,7 @@ use std::pin::Pin;
 use gotham::handler::HandlerFuture;
 use gotham::hyper::{body, Body, Uri, StatusCode};
 use gotham::helpers::http::response::{create_response, create_empty_response};
-use mime::{TEXT_HTML, IMAGE_JPEG, IMAGE_PNG, IMAGE_SVG, TEXT_CSS, TEXT_JAVASCRIPT, TEXT_XML, TEXT_PLAIN, Mime};
+use mime::{TEXT_HTML, IMAGE_JPEG, IMAGE_PNG, IMAGE_SVG, TEXT_CSS, TEXT_JAVASCRIPT, TEXT_XML, TEXT_PLAIN};
 use std::fs;
 use serde::{Deserialize, Serialize};
 use futures_util::{future, FutureExt};
